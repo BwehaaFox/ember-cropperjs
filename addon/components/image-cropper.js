@@ -1,5 +1,5 @@
-import { assign } from '@ember/polyfills';
 import { compare } from '@ember/utils';
+import { action } from '@ember/object';
 import { join, scheduleOnce } from '@ember/runloop';
 import { setProperties, set, get } from '@ember/object';
 import Component from '@ember/component';
@@ -36,7 +36,7 @@ const OPTS_REQUIRE_NEW = [
   @class ImageCropper
   @public
 */
-export default Component.extend({
+export default class CropperJsComponent extends Component.extend({
   classNames: [ 'image-cropper' ],
   layout,
 
@@ -66,20 +66,9 @@ export default Component.extend({
   options: null,
 
   _Cropper: null,
-  _cropper: null,
+  ccropper: null,
   _prevOptions: null,
   _prevSource: null,
-
-  init() {
-    this._super(...arguments);
-    
-    if (window && window.document) {
-      import('cropperjs').then((module) => {
-        this._Cropper = module.default;
-        join(() => this._setup());
-      });
-    }
-  },
 
   didInsertElement() {
     this._super(...arguments);
@@ -90,9 +79,9 @@ export default Component.extend({
   didUpdateAttrs() {
     this._super(...arguments);
 
-    const { _cropper } = this;
+    const { ccropper } = this;
 
-    if (_cropper === null || this._Cropper === null) {
+    if (ccropper === null || this._Cropper === null) {
       return;
     }
 
@@ -100,7 +89,7 @@ export default Component.extend({
     if (compare(get(this, 'source'), get(this, '_prevSource')) !== 0) {
       const source = get(this, 'source');
 
-      _cropper.replace(source);
+      ccropper.replace(source);
       set(this, '_prevSource', source);
     }
 
@@ -114,13 +103,13 @@ export default Component.extend({
     if (window && window.document) {
       if (OPTS_REQUIRE_NEW.some((opt) => compare(options[opt], this._prevOptions[opt]) !== 0)) {
         // Note that .getData() will fail unless the cropper is already ready
-        const shouldRetainData = _cropper.ready;
-        const data = shouldRetainData ? _cropper.getData() : null;
-        const canvasData = shouldRetainData ? _cropper.getCanvasData() : null;
+        const shouldRetainData = ccropper.ready;
+        const data = shouldRetainData ? ccropper.getData() : null;
+        const canvasData = shouldRetainData ? ccropper.getCanvasData() : null;
 
-        _cropper.destroy();
+        ccropper.destroy();
 
-        const opts = assign({}, options);
+        const opts = {...options};
         const source = get(this, 'source');
         const image = document.getElementById(`image-cropper-${get(this, 'elementId')}`);
         const newCropper = new this._Cropper(image, opts)
@@ -151,7 +140,7 @@ export default Component.extend({
 
         setProperties(this, {
           _prevOptions: opts,
-          _cropper: newCropper
+          ccropper: newCropper
         });
 
         return;
@@ -161,38 +150,48 @@ export default Component.extend({
     // Diff the `options` hash for changes
     for (const opt in OPT_UPDATE_METHODS) {
       if (compare(options[opt], this._prevOptions[opt]) !== 0) {
-        _cropper[OPT_UPDATE_METHODS[opt]](options[opt]);
+        ccropper[OPT_UPDATE_METHODS[opt]](options[opt]);
       }
     }
 
-    set(this, '_prevOptions', assign({}, options));
+    set(this, '_prevOptions', {...options});
   },
 
   willDestroyElement() {
     this._super(...arguments);
 
-    const _cropper = get(this, '_cropper');
-    if (_cropper !== null) {
-      _cropper.destroy();
+    const ccropper = get(this, 'ccropper');
+    if (ccropper !== null) {
+      ccropper.destroy();
     }
   },
 
-  _setup() {
-    if (this.isDestroyed || this.isDestroying || !this.element || this._Cropper === null || this._cropper !== null) {
+  _setup(e) {
+    if (this.isDestroyed || this.isDestroying || !this.element || this._Cropper === null || this.ccropper !== null) {
       return;
     }
     if (window && window.document) {
-      const image = document.getElementById(`image-cropper-${get(this, 'elementId')}`);
+      const image = e;
       const options = get(this, 'options');
 
       // Need a copy because Cropper does not seem to like the Ember EmptyObject that is created from the `{{hash}}` helper
-      const opts = assign({}, options);
+      const opts = {...options};
 
       setProperties(this, {
-        _cropper: new this._Cropper(image, opts),
+        ccropper: new this._Cropper(image, opts),
         _prevOptions: opts,
         _prevSource: get(this, 'source')
       });
     }
   }
-});
+}) {
+  @action
+  initCrop(e) {
+    if (window && window.document) {
+      import('cropperjs').then((module) => {
+        this._Cropper = module.default;
+        join(() => this._setup(e));
+      });
+    }
+  }
+}
